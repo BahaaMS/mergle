@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mergle — the daily merged-country guessing game</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Manrope:wght@500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- Only d3-geo is needed (geoMercator / geoPath / geoCentroid), plus d3-array which it depends on:
+     ~54 KB instead of the full 280 KB d3 bundle. Load order matters (d3-array first). -->
+<script src="https://cdn.jsdelivr.net/npm/d3-array@3.2.4/dist/d3-array.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/dist/d3-geo.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="site-header">
+    <div class="brand">
+      <svg class="logo" width="52" height="52" viewBox="0 0 48 48" aria-hidden="true">
+        <path class="logo-shape logo-shape-a" d="M8,7 C13,3 21,4 25,9 C28,13 27,18 23,21 C19,20 13,20 9,23 C5,19 4,12 8,7 Z"/>
+        <path class="logo-shape logo-shape-b" d="M23,21 C27,19 33,20 37,25 C40,30 38,36 33,39 C28,41 20,40 18,35 C21,31 21,26 23,21 Z"/>
+        <path class="logo-border" d="M23,21 L20,25 L24,28 L19,32 L18,35" fill="none"/>
+      </svg>
+      <h1 class="wordmark">Merg<em>le</em></h1>
+    </div>
+    <div class="header-actions">
+      <button type="button" id="stats-btn" class="icon-btn" aria-label="Stats">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="6" y1="20" x2="6" y2="13"/>
+          <line x1="12" y1="20" x2="12" y2="9"/>
+          <line x1="18" y1="20" x2="18" y2="4"/>
+        </svg>
+      </button>
+      <button type="button" id="settings-btn" class="icon-btn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+      <button type="button" id="howto-btn" class="icon-btn" aria-label="How to play">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <p class="tagline">Two bordering countries, fused into one shape. Guess both in 6 tries.</p>
+
+  <div class="schedule-tester" id="schedule-tester" hidden>
+    <button type="button" id="test-toggle-btn" class="btn-ghost">🧪 Schedule tester</button>
+    <div class="schedule-tester-controls" id="schedule-tester-controls" hidden>
+      <button type="button" id="prev-day-btn" class="map-ctrl-btn" aria-label="Previous day">◀</button>
+      <span id="schedule-tester-date" class="mono schedule-tester-date"></span>
+      <button type="button" id="next-day-btn" class="map-ctrl-btn" aria-label="Next day">▶</button>
+      <button type="button" id="today-btn" class="btn-ghost">Today</button>
+    </div>
+  </div>
+
+  <main class="game-panel">
+    <div class="map-wrap">
+      <svg class="map" width="400" height="250" viewBox="0 0 400 250" role="img" aria-label="Merged silhouette of today's two countries"></svg>
+      <div class="map-controls">
+        <button type="button" id="zoom-in-btn" class="map-ctrl-btn" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-out-btn" class="map-ctrl-btn" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-reset-btn" class="map-ctrl-btn map-ctrl-reset" aria-label="Reset view">⤾</button>
+      </div>
+    </div>
+
+    <div class="guess-row">
+      <div class="guess-field">
+        <label for="guess1">Country 1</label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="guess1" autocomplete="off" placeholder="Type a country…">
+          <ul class="suggestions" id="suggestions1" hidden></ul>
+        </div>
+      </div>
+      <div class="guess-field">
+        <label for="guess2">Country 2</label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="guess2" autocomplete="off" placeholder="Type a country…">
+          <ul class="suggestions" id="suggestions2" hidden></ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="info-note">Guess two countries at once? Only the closer guess reveals its distance.</p>
+
+    <button type="button" id="submit-btn" class="btn-primary">Submit guess</button>
+
+    <p id="feedback" role="status"></p>
+
+    <button type="button" id="share-btn-main" class="btn-primary share-btn" hidden>Share result</button>
+
+    <div class="history" id="history" aria-live="polite"></div>
+
+    <div class="hints-row">
+      <button type="button" id="hint-border-btn" class="btn-hint">Reveal half border</button>
+      <button type="button" id="hint-neighbor-btn" class="btn-hint">Show neighbor outlines</button>
+    </div>
+
+    <p class="counters">Attempt <span id="attempts" class="mono">0</span> / 6<span id="hardmode-badge" class="hard-badge" hidden>🔥 Hard mode</span></p>
+  </main>
+
+  <div id="howto-modal" class="modal hidden">
+    <div class="modal-content howto-content">
+      <span id="close-howto-modal" class="close-btn" role="button" aria-label="Close">&times;</span>
+      <h2>How to Play</h2>
+      <p class="howto-intro">Every day, two real countries that actually share a border are fused into one silhouette. Guess both of them in 6 attempts.</p>
+
+      <h3>Guessing</h3>
+      <p>Type a country into either box — or both at once — and hit Submit. Whether you fill one box or two, it counts as a single attempt.</p>
+
+      <h3>Reading the feedback</h3>
+      <p>Guess correctly and it locks in green right away. Guess wrong and you get a colored arrow pointing toward the real country plus the distance to it. Both are measured between the two countries’ closest border points, not their centers — cool white means far off, deep red means very close, and the darkest red means you named one of its actual neighbors. If both boxes are wrong in the same attempt, only the closer guess reveals its arrow and distance; the other just tells you it lost.</p>
+
+      <h3>Hints</h3>
+      <p><strong>Reveal half border</strong> sweeps out part of the actual shared border between the two countries (a second click reveals the rest). <strong>Show neighbor outlines</strong> traces the surrounding countries for context. Both are optional — skipping them keeps your hint-free streak in Stats.</p>
+
+      <h3>Example</h3>
+      <p class="howto-example-setup">Say today's fused shape is secretly <strong>Ecuador + Peru</strong>:</p>
+
+      <div class="howto-example">
+        <div class="history-row">
+          <div class="history-row-label">Attempt 1</div>
+          <div class="history-guesses">
+            <span class="history-chip">
+              <span class="direction-badge" style="background:#932220;color:#fff">↖</span>
+              <span class="history-chip-name">Argentina</span> 554 km
+            </span>
+          </div>
+        </div>
+        <p class="howto-example-note">Wrong, but close — Peru is about 550 km to the northwest, and the deep red badge says you’re near.</p>
+
+        <div class="history-row">
+          <div class="history-row-label">Attempt 2</div>
+          <div class="history-guesses">
+            <span class="history-chip correct"><span class="history-chip-name">Peru</span> Correct ✓</span>
+            <span class="history-chip">
+              <span class="direction-badge" style="background:#9d2824;color:#fff">↖</span>
+              <span class="history-chip-name">Bolivia</span> 1,216 km
+            </span>
+          </div>
+        </div>
+        <p class="howto-example-note">Peru locks in green. Bolivia was wrong too, but since Peru is already solved, its distance is measured to the only country still left to find — Ecuador.</p>
+
+        <div class="history-row">
+          <div class="history-row-label">Attempt 3</div>
+          <div class="history-guesses">
+            <span class="history-chip correct"><span class="history-chip-name">Ecuador</span> Correct ✓</span>
+          </div>
+        </div>
+        <p class="howto-example-note">Both found — solved in 3 of 6 attempts, no hints used.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content settings-content">
+      <span id="close-settings-modal" class="close-btn" role="button" aria-label="Close">&times;</span>
+      <h2>Settings</h2>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <span class="toggle-label">Hard mode</span>
+          <span class="toggle-desc">Wrong guesses just say "Incorrect" — no distance or direction hint. Locks once you make your first guess of the day.</span>
+          <span class="toggle-lock-note" id="hardmode-lock-note" hidden>🔒 Locked for today's game — you can change it once you finish.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="setting-hardmode">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <span class="toggle-label">Distance in miles</span>
+          <span class="toggle-desc">Show guess distances in miles instead of kilometers.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="setting-miles">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div id="stats-modal" class="modal hidden">
+    <div class="modal-content stats-content" role="dialog" aria-modal="true" aria-labelledby="stats-title">
+      <header class="stats-head">
+        <h2 id="stats-title">Statistics</h2>
+        <button type="button" id="close-modal" class="close-btn" aria-label="Close statistics">&times;</button>
+      </header>
+
+      <div class="stats-body" id="stats-body">
+
+        <!-- Today's result (only shown once the game is over) -->
+        <section class="stats-today" id="reveal-countries" hidden>
+          <p id="reveal-countries-text" class="today-countries"></p>
+          <p id="reveal-result-text" class="today-result"></p>
+          <p id="reveal-flags-text" class="today-flags"></p>
+          <button type="button" id="share-btn" class="btn-primary share-btn" hidden>Share result</button>
+        </section>
+
+        <!-- First-visit state: replaces all the zeros -->
+        <div class="stats-empty" id="stats-empty" hidden>
+          <p class="stats-empty-title">No games on record yet</p>
+          <p class="stats-empty-text">Finish today&rsquo;s puzzle and your streak, win rate and guess history will show up here.</p>
+        </div>
+
+        <!-- Streaks -->
+        <section class="streaks stats-data" aria-label="Streaks">
+          <div class="streak streak-current" id="streak-current">
+            <span class="streak-badge" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+              </svg>
+            </span>
+            <div class="streak-text">
+              <span class="streak-num" id="stat-streak">0</span>
+              <span class="streak-label">Current streak</span>
+            </div>
+          </div>
+          <div class="streak streak-best">
+            <div class="streak-text">
+              <span class="streak-num" id="stat-max-streak">0</span>
+              <span class="streak-label">Best streak</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Win rate ring + the three headline numbers -->
+        <section class="stats-summary stats-data" aria-label="Your record">
+          <div class="ring" id="win-ring" style="--pct:0">
+            <div class="ring-arc"></div>
+            <div class="ring-value">
+              <span class="ring-num" id="stat-winrate">0%</span>
+              <span class="ring-caption">win rate</span>
+            </div>
+          </div>
+          <dl class="stat-rows stat-rows-main">
+            <div class="stat-row"><dt>Games won</dt><dd id="stat-played">0</dd></div>
+            <div class="stat-row"><dt>Games played</dt><dd id="stat-games">0</dd></div>
+            <div class="stat-row"><dt>Average guesses</dt><dd id="stat-avg">&ndash;</dd></div>
+          </dl>
+        </section>
+
+        <!-- Secondary numbers -->
+        <section class="stats-data" aria-label="More detail">
+          <dl class="stat-rows stat-rows-more">
+            <div class="stat-row"><dt>Won without hints</dt><dd id="stat-clean">0</dd></div>
+            <div class="stat-row"><dt>Hard mode wins</dt><dd id="stat-hard">&ndash;</dd></div>
+            <div class="stat-row" id="stat-hard-avg-row" hidden><dt>Average on hard mode</dt><dd id="stat-hard-avg">&ndash;</dd></div>
+          </dl>
+        </section>
+
+        <!-- Guess distribution -->
+        <section class="distribution stats-data">
+          <h3 class="dist-title">Guesses per game</h3>
+          <div id="dist-rows"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="script.js"></script>
+</body>
+</html>
