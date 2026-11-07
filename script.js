@@ -278,23 +278,17 @@ function renderStatsUI(stats, todaysBucket) {
 
     const streak = getDisplayStreak(stats);
     document.getElementById('stat-played').textContent = stats.totalSolves;
-    document.getElementById('stat-games').textContent = gamesPlayed;
     document.getElementById('stat-winrate').textContent = gamesPlayed > 0 ? winRate + '%' : '\u2013';
-    document.getElementById('win-ring').style.setProperty('--pct', winRate);
     document.getElementById('stat-avg').textContent = avgGuesses === null ? '\u2013' : avgGuesses.toFixed(1);
     document.getElementById('stat-streak').textContent = streak;
     document.getElementById('streak-current').classList.toggle('alive', streak > 0); // flame lights up while a streak is running
     document.getElementById('stat-max-streak').textContent = stats.maxStreak;
     document.getElementById('stat-clean').textContent = stats.cleanSolves;
 
-    // Hard mode (also counted in the totals above, shown separately here)
-    const hp = stats.hardPlayed || 0, hs = stats.hardSolves || 0;
-    document.getElementById('stat-hard').textContent = hp === 0 ? '\u2013' : `${hs} of ${hp}`;
-    document.getElementById('stat-hard-avg-row').hidden = hs === 0;
-    document.getElementById('stat-hard-avg').textContent = hs > 0 ? ((stats.hardGuessTotal || 0) / hs).toFixed(1) : '\u2013';
+    // Hard mode wins (also counted in the totals above)
+    document.getElementById('stat-hard').textContent = stats.hardSolves || 0;
 
     document.getElementById('stats-empty').hidden = gamesPlayed > 0;
-    document.getElementById('stats-body').classList.toggle('is-empty', gamesPlayed === 0); // first visit: hide the zeros
     renderDistribution(dist, todaysBucket);
 }
 
@@ -303,22 +297,17 @@ function renderDistribution(distribution, todaysBucket) {
     const buckets = ['1', '2', '3', '4', '5', '6', 'loss'];
     const maxCount = Math.max(1, ...buckets.map(b => dist[b] || 0));
     const container = document.getElementById('dist-rows');
-    container.innerHTML = buckets.map((b, i) => {
+    container.innerHTML = buckets.map(b => {
         const count = dist[b] || 0;
-        // --h is 0..1 (share of the tallest column); a non-zero count never drops below a visible sliver
-        const h = count === 0 ? 0 : Math.max(0.08, count / maxCount);
+        const pct = count === 0 ? 0 : Math.max(6, Math.round((count / maxCount) * 100));
         const isToday = todaysBucket != null && String(todaysBucket) === b;
-        const cls = ['dist-col'];
-        if (b === 'loss') cls.push('loss');
-        if (count === 0) cls.push('zero');
-        if (isToday) cls.push('today');
+        const rowClasses = ['dist-row'];
+        if (b === 'loss') rowClasses.push('loss');
+        if (isToday) rowClasses.push('today');
         return `
-          <div class="${cls.join(' ')}" style="--i:${i}" role="img" aria-label="${b === 'loss' ? 'Not solved' : b + (b === '1' ? ' guess' : ' guesses')}: ${count} ${count === 1 ? 'game' : 'games'}${isToday ? ' (today)' : ''}">
-            <div class="dist-stack">
-              <span class="dist-count">${count > 0 ? count : ''}</span>
-              <span class="dist-bar" style="--h:${h.toFixed(3)}"></span>
-            </div>
-            <span class="dist-label">${b === 'loss' ? 'X' : b}</span>
+          <div class="${rowClasses.join(' ')}" role="img" aria-label="${b === 'loss' ? 'Not solved' : b + (b === '1' ? ' guess' : ' guesses')}: ${count} ${count === 1 ? 'game' : 'games'}${isToday ? ' (today)' : ''}">
+            <div class="dist-label">${b === 'loss' ? 'X' : b}</div>
+            <div class="dist-bar-track"><div class="dist-bar-fill" style="width:${pct}%${count === 0 ? ';padding:0' : ''}"><span>${count > 0 ? count : ''}</span></div></div>
           </div>`;
     }).join('');
 }
@@ -723,6 +712,7 @@ Promise.all([
             path.setAttribute('class', 'neighbor-outline');
             neighborsGroup.appendChild(path);
         });
+        updateMinScale();
     }
 
 
@@ -794,7 +784,11 @@ Promise.all([
     // Lets players zoom into cramped regions (a huge country like Russia
     // paired with several small, tightly-packed neighbors) instead of being
     // stuck with one fixed view where labels overlap and are unreadable.
-    const MIN_SCALE = 1, MAX_SCALE = 8;
+    const HOME_SCALE = 1, MAX_SCALE = 8;
+    // Normally you can't zoom out past the starting view (there's nothing outside
+    // it). Once the neighbor outlines are on the map they can extend past the
+    // frame, so updateMinScale() lowers this to let the player zoom out to see them.
+    let minScale = HOME_SCALE;
     const MAP_W = 400, MAP_H = 250; // the svg's viewBox
     let view = { scale: 1, tx: 0, ty: 0 };
 
@@ -812,7 +806,7 @@ Promise.all([
     function applyView() {
         clampView();
         mapContent.setAttribute('transform', `translate(${view.tx},${view.ty}) scale(${view.scale})`);
-        svg.classList.toggle('zoomed', view.scale > MIN_SCALE);
+        svg.classList.toggle('zoomed', view.scale !== HOME_SCALE);
     }
 
     function svgPoint(clientX, clientY) {
@@ -826,12 +820,28 @@ Promise.all([
 
     function zoomAt(px, py, factor) {
         const oldScale = view.scale;
-        const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, oldScale * factor));
+        const newScale = Math.min(MAX_SCALE, Math.max(minScale, oldScale * factor));
         if (newScale === oldScale) return;
         view.tx = px - (newScale / oldScale) * (px - view.tx);
         view.ty = py - (newScale / oldScale) * (py - view.ty);
         view.scale = newScale;
         applyView();
+    }
+
+    // Called whenever the neighbor outlines are drawn. Measures everything on the
+    // map (the pair + its neighbors) and allows zooming out until it all fits,
+    // with at least a little room to zoom out even if it already fits.
+    function updateMinScale() {
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        [countryA, countryB, ...neighborFeatures].forEach(f => {
+            const b = pathGenerator.bounds(f);
+            if (![b[0][0], b[0][1], b[1][0], b[1][1]].every(Number.isFinite)) return;
+            x0 = Math.min(x0, b[0][0]); y0 = Math.min(y0, b[0][1]);
+            x1 = Math.max(x1, b[1][0]); y1 = Math.max(y1, b[1][1]);
+        });
+        if (!Number.isFinite(x0)) { minScale = 0.5; return; }
+        const fit = 0.9 * Math.min(MAP_W / Math.max(1, x1 - x0), MAP_H / Math.max(1, y1 - y0));
+        minScale = Math.max(0.15, Math.min(0.7, fit));
     }
 
     function resetView() {
@@ -843,17 +853,16 @@ Promise.all([
     document.getElementById('zoom-out-btn').addEventListener('click', () => zoomAt(200, 125, 1 / 1.5));
     document.getElementById('zoom-reset-btn').addEventListener('click', resetView);
 
-    // Wheel zooms the map directly. The page is only blocked while the wheel
-    // actually changes the zoom: once fully zoomed out (or fully zoomed in),
-    // extra scrolling passes through so the page can still scroll.
+    // Wheel over the map zooms the map and never scrolls the page - even once
+    // fully zoomed in or out - so the page can't jump away mid-zoom. (Scrolling
+    // with the cursor anywhere else on the page works as normal.)
     svg.addEventListener('wheel', (e) => {
+        e.preventDefault();
         const { x, y } = svgPoint(e.clientX, e.clientY);
         // Proportional to the wheel delta so mouse wheels and (much smaller,
         // much more frequent) trackpad-pinch events both feel right.
         const delta = Math.max(-60, Math.min(60, e.deltaY));
-        const before = view.scale;
         zoomAt(x, y, Math.exp(-delta * 0.004));
-        if (view.scale !== before) e.preventDefault();
     }, { passive: false });
 
     // Mouse drag to pan (at any zoom level)
@@ -885,7 +894,7 @@ Promise.all([
         if (e.touches.length === 1) {
             const t = e.touches[0];
             touchState = {
-                mode: view.scale > MIN_SCALE ? 'pan' : 'pending',
+                mode: view.scale !== HOME_SCALE ? 'pan' : 'pending',
                 x: t.clientX, y: t.clientY, tx: view.tx, ty: view.ty
             };
         } else if (e.touches.length === 2) {
@@ -915,7 +924,7 @@ Promise.all([
             const [t0, t1] = e.touches;
             const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
             const mid = svgPoint((t0.clientX + t1.clientX) / 2, (t0.clientY + t1.clientY) / 2);
-            const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, touchState.scale * (dist / touchState.dist)));
+            const newScale = Math.min(MAX_SCALE, Math.max(minScale, touchState.scale * (dist / touchState.dist)));
             // keep the map point that started under the fingers under their current midpoint
             view.tx = mid.x - (newScale / touchState.scale) * (touchState.cx - touchState.tx);
             view.ty = mid.y - (newScale / touchState.scale) * (touchState.cy - touchState.ty);

@@ -196,70 +196,58 @@
         <button type="button" id="close-modal" class="close-btn" aria-label="Close statistics">&times;</button>
       </header>
 
-      <div class="stats-body" id="stats-body">
+      <div class="stats-body">
 
-        <!-- Today's result (only shown once the game is over) -->
+        <!-- Today's result: one compact strip, only once the game is over -->
         <section class="stats-today" id="reveal-countries" hidden>
-          <p id="reveal-countries-text" class="today-countries"></p>
-          <p id="reveal-result-text" class="today-result"></p>
-          <p id="reveal-flags-text" class="today-flags"></p>
-          <button type="button" id="share-btn" class="btn-primary share-btn" hidden>Share result</button>
+          <div class="today-main">
+            <p id="reveal-countries-text" class="today-countries"></p>
+            <p id="reveal-result-text" class="today-result"></p>
+            <p id="reveal-flags-text" class="today-flags"></p>
+          </div>
+          <button type="button" id="share-btn" class="share-btn today-share">Share result</button>
         </section>
 
-        <!-- First-visit state: replaces all the zeros -->
-        <div class="stats-empty" id="stats-empty" hidden>
-          <p class="stats-empty-title">No games on record yet</p>
-          <p class="stats-empty-text">Finish today&rsquo;s puzzle and your streak, win rate and guess history will show up here.</p>
-        </div>
+        <p class="stats-empty" id="stats-empty" hidden>Finish a puzzle and your record starts here.</p>
 
-        <!-- Streaks -->
-        <section class="streaks stats-data" aria-label="Streaks">
-          <div class="streak streak-current" id="streak-current">
-            <span class="streak-badge" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
-              </svg>
-            </span>
-            <div class="streak-text">
-              <span class="streak-num" id="stat-streak">0</span>
-              <span class="streak-label">Current streak</span>
+        <!-- Stat cards: five across, then a row of two wider ones -->
+        <section class="cards" aria-label="Your record">
+          <div class="card-row card-row-main">
+            <div class="stat-card" id="streak-current">
+              <span class="stat-num"><svg class="stat-flame" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg><span id="stat-streak">0</span></span>
+              <span class="stat-label">Current<br>streak</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-num"><svg class="stat-flame stat-flame-best" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg><span id="stat-max-streak">0</span></span>
+              <span class="stat-label">Best<br>streak</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-num" id="stat-avg">&ndash;</span>
+              <span class="stat-label">Average<br>guesses</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-num" id="stat-played">0</span>
+              <span class="stat-label">Games<br>won</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-num" id="stat-winrate">0%</span>
+              <span class="stat-label">Win<br>rate</span>
             </div>
           </div>
-          <div class="streak streak-best">
-            <div class="streak-text">
-              <span class="streak-num" id="stat-max-streak">0</span>
-              <span class="streak-label">Best streak</span>
+
+          <div class="card-row card-row-more">
+            <div class="stat-card">
+              <span class="stat-num" id="stat-clean">0</span>
+              <span class="stat-label">Won without hints</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-num" id="stat-hard">0</span>
+              <span class="stat-label">Hard mode wins</span>
             </div>
           </div>
         </section>
 
-        <!-- Win rate ring + the three headline numbers -->
-        <section class="stats-summary stats-data" aria-label="Your record">
-          <div class="ring" id="win-ring" style="--pct:0">
-            <div class="ring-arc"></div>
-            <div class="ring-value">
-              <span class="ring-num" id="stat-winrate">0%</span>
-              <span class="ring-caption">win rate</span>
-            </div>
-          </div>
-          <dl class="stat-rows stat-rows-main">
-            <div class="stat-row"><dt>Games won</dt><dd id="stat-played">0</dd></div>
-            <div class="stat-row"><dt>Games played</dt><dd id="stat-games">0</dd></div>
-            <div class="stat-row"><dt>Average guesses</dt><dd id="stat-avg">&ndash;</dd></div>
-          </dl>
-        </section>
-
-        <!-- Secondary numbers -->
-        <section class="stats-data" aria-label="More detail">
-          <dl class="stat-rows stat-rows-more">
-            <div class="stat-row"><dt>Won without hints</dt><dd id="stat-clean">0</dd></div>
-            <div class="stat-row"><dt>Hard mode wins</dt><dd id="stat-hard">&ndash;</dd></div>
-            <div class="stat-row" id="stat-hard-avg-row" hidden><dt>Average on hard mode</dt><dd id="stat-hard-avg">&ndash;</dd></div>
-          </dl>
-        </section>
-
-        <!-- Guess distribution -->
-        <section class="distribution stats-data">
+        <section class="distribution">
           <h3 class="dist-title">Guesses per game</h3>
           <div id="dist-rows"></div>
         </section>
